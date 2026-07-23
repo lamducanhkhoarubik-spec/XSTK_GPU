@@ -5,7 +5,7 @@ library(ggplot2)
 library(tidyr)
 
 #Đọc dữ liệu từ dataset
-df <- read.csv(C:/Users/ACER/Documents/BTL_XSTK/XSTK_GPU/All_GPUs.csv)
+df <- read.csv("C:/Users/ACER/Downloads/All_GPUs (1).csv")
 # 1. Xóa khoảng trắng cho TẤT CẢ các cột dạng chữ (character)
 df <- df %>%
   mutate(across(where(is.character), str_trim))
@@ -31,7 +31,7 @@ missing_summary$Column <- factor(missing_summary$Column, levels = missing_summar
 ggplot(missing_summary, aes(x = Column, y = Percentage)) +
   # Vẽ cột màu xanh dodgerblue giống Python
   geom_bar(stat = "identity", fill = "dodgerblue", color = "black") +
-    geom_text(
+  geom_text(
     data = filter(missing_summary, Percentage > 0), # Chỉ hiển thị nếu > 0%
     aes(label = sprintf("%.1f%%", Percentage)),      # Định dạng 1 chữ số thập phân
     vjust = -0.8,                                   # Đẩy chữ lên phía trên đầu cột
@@ -136,10 +136,11 @@ df_imputed <- df_imputed %>%
 # In số dòng sau khi đã dropna ở 2 cột này để bạn kiểm tra
 cat("Số dòng sau khi xóa khuyết thiếu ở Year và Architecture:", nrow(df_imputed), "\n")
 # 6. ĐIỀN KHUYẾT (Imputation) ngẫu nhiên 2^i cho cột 'Memory (MB)'
-memory_choices <- 2^(5:12)
+memory_choices <- 2^(5:14)
 na_memory_indices <- which(is.na(df_imputed$`Memory (MB)`))
 
 if (length(na_memory_indices) > 0) {
+  set.seed(42)
   df_imputed$`Memory (MB)`[na_memory_indices] <- sample(
     memory_choices, 
     size = length(na_memory_indices), 
