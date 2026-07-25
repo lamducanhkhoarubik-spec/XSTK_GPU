@@ -8,19 +8,19 @@ qqline(nvidia$Memory_Bandwidth..GB.sec.)
 ad.test(nvidia$Memory_Bandwidth..GB.sec.)
 
 amd = subset(df, df$Manufacturer == "AMD")
-qqnorm(nvidia$Memory_Bandwidth..GB.sec.)
-qqline(nvidia$Memory_Bandwidth..GB.sec.)
-ad.test(nvidia$Memory_Bandwidth..GB.sec.)
+qqnorm(amd$Memory_Bandwidth..GB.sec.)
+qqline(amd$Memory_Bandwidth..GB.sec.)
+ad.test(amd$Memory_Bandwidth..GB.sec.)
 
 intel = subset(df, df$Manufacturer == "Intel")
-qqnorm(nvidia$Memory_Bandwidth..GB.sec.)
-qqline(nvidia$Memory_Bandwidth..GB.sec.)
-ad.test(nvidia$Memory_Bandwidth..GB.sec.)
+qqnorm(intel$Memory_Bandwidth..GB.sec.)
+qqline(intel$Memory_Bandwidth..GB.sec.)
+ad.test(intel$Memory_Bandwidth..GB.sec.)
 
 ati = subset(df, df$Manufacturer == "ATI")
-qqnorm(nvidia$Memory_Bandwidth..GB.sec.)
-qqline(nvidia$Memory_Bandwidth..GB.sec.)
-ad.test(nvidia$Memory_Bandwidth..GB.sec.)
+qqnorm(ati$Memory_Bandwidth..GB.sec.)
+qqline(ati$Memory_Bandwidth..GB.sec.)
+ad.test(ati$Memory_Bandwidth..GB.sec.)
 
 
 df_anova <- aov(Memory_Bandwidth..GB.sec. ~ Manufacturer, data = df)
