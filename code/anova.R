@@ -38,4 +38,4 @@ leveneTest(Memory_Bandwidth ~ Manufacturer, data = df)
 
 # 4. Thuc hien Welch's ANOVA
 welch_res <- welch_anova_test(Memory_Bandwidth ~ Manufacturer, data = df)
-print(welch_res)
+`print(welch_res)
