@@ -1,249 +1,249 @@
-# ============================================================
-# GPU DESCRIPTIVE STATISTICS - CORE ANALYSIS
-# Chỉ giữ phần phân tích chính, xuất kết quả dạng bảng số
-# ============================================================
 
-# Cấu hình
-INPUT_PATH <- ""
-OUTPUT_DIR <- "ket_qua_thong_ke"
-RANDOM_SEED <- 20260726
-
-# Load packages
 library(dplyr)
-library(readr)
+library(ggplot2)
 library(e1071)
+library(patchwork)
+library(reshape2)
 
-set.seed(RANDOM_SEED)
-options(scipen = 999)
+INPUT_PATH <- "C:/Users/ASUS/Downloads/All_GPUs_cleaned.csv"
+df <- read.csv(INPUT_PATH, check.names = FALSE, stringsAsFactors = FALSE)
 
-# -------------------- HÀM ĐỌC DỮ LIỆU --------------------
-read_data <- function(path) {
-  # Đọc CSV, tự động thử nhiều encoding
-  encodings <- c("UTF-8", "UTF-8-BOM", "windows-1252", "ISO-8859-1")
-  for (enc in encodings) {
-    df <- tryCatch(
-      read_csv(path, locale = locale(encoding = enc), show_col_types = FALSE),
-      error = function(e) NULL
-    )
-    if (!is.null(df)) return(as.data.frame(df))
-  }
-  stop("Không đọc được file CSV")
-}
 
-# -------------------- ÁNH XẠ CỘT --------------------
-map_columns <- function(df) {
-  names_lower <- tolower(names(df))
-  
-  cols <- list(
-    manufacturer = c("manufacturer", "brand", "vendor"),
-    year = c("year", "release_year"),
-    bandwidth = c("memory_bandwidth", "memory_bandwidth (gb/sec)"),
-    memory = c("memory", "memory_mb", "memory (mb)"),
-    bus = c("memory_bus", "memory_bus (bit)"),
-    speed = c("memory_speed", "memory_speed (mhz)"),
-    architecture = c("architecture", "gpu_architecture"),
-    name = c("name", "gpu_name", "product_name")
-  )
-  
-  found <- list()
-  for (key in names(cols)) {
-    match <- names_lower[names_lower %in% cols[[key]]][1]
-    found[[key]] <- if (!is.na(match)) names(df)[which(names_lower == match)[1]] else NA
-  }
-  
-  # Kiểm tra cột bắt buộc
-  required <- c("manufacturer", "year", "bandwidth")
-  missing <- required[sapply(required, function(x) is.na(found[[x]]))]
-  if (length(missing) > 0) {
-    stop("Thiếu cột: ", paste(missing, collapse = ", "))
-  }
-  
-  found
-}
+# Biểu đồ hộp: Số lượng GPU theo nhà sản xuất
+hinh_1 <- ggplot(df, aes(x = Manufacturer, fill = Manufacturer)) +
+  geom_bar(width = 0.7) +
+  geom_text(stat = 'count', aes(label = ..count..), vjust = -0.4, fontface = "bold") +
+  theme_minimal() +
+  labs(x = "Nhà sản xuất", y = "Số bản ghi")
+print(hinh_1)
 
-# -------------------- THỐNG KÊ MÔ TẢ --------------------
-descriptive_stats <- function(x) {
-  x <- as.numeric(x)
-  x <- x[is.finite(x)]
-  n <- length(x)
-  
-  if (n == 0) return(rep(NA, 14))
-  
-  q <- quantile(x, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+
+# Bảng: Thống kê mô tả của 5 biến định lượng
+
+num_cols <- c("Year", "Memory (MB)", "Memory_Bandwidth (GB/sec)", "Memory_Bus (Bit)", "Memory_Speed (MHz)")
+num_data <- df[, intersect(num_cols, names(df))]
+
+calc_stats_full <- function(x) {
+  mean_val <- mean(x, na.rm = TRUE)
+  sd_val <- sd(x, na.rm = TRUE)
+  cv_val <- (sd_val / mean_val) * 100
   
   c(
-    n = n,
-    mean = mean(x),
-    median = q[3],
-    min = q[1],
-    q1 = q[2],
-    q3 = q[4],
-    max = q[5],
-    sd = if (n >= 2) sd(x) else NA,
-    var = if (n >= 2) var(x) else NA,
-    iqr = q[4] - q[2],
-    skewness = if (n >= 3) skewness(x, type = 2) else NA,
-    kurtosis = if (n >= 4) kurtosis(x, type = 2) else NA,
-    missing = sum(is.na(x)),
-    missing_pct = mean(is.na(x)) * 100
+    n = sum(!is.na(x)),
+    Min = min(x, na.rm = TRUE),
+    Max = max(x, na.rm = TRUE),
+    Mean = mean_val,
+    Dolechchuan = sd_val,
+    CV_Percent = cv_val,
+    Phuongsai = var(x, na.rm = TRUE),
+    Median = median(x, na.rm = TRUE),
+    Skewness = e1071::skewness(x, na.rm = TRUE, type = 2)
   )
 }
 
-# -------------------- PHÂN TÍCH CHÍNH --------------------
-main <- function() {
-  cat("\n=== PHÂN TÍCH THỐNG KÊ MÔ TẢ GPU ===\n\n")
-  
-  # 1. Đọc dữ liệu
-  cat("[1/4] Đọc dữ liệu...\n")
-  df <- read_data(INPUT_PATH)
-  cols <- map_columns(df)
-  cat("  -", nrow(df), "dòng,", ncol(df), "cột\n")
-  cat("  - Biến chính:", paste(unlist(cols[1:6]), collapse = ", "), "\n\n")
-  
-  # 2. Lấy các biến cần phân tích
-  target_cols <- c(cols$bandwidth, cols$memory, cols$bus, cols$speed, cols$year)
-  target_cols <- target_cols[!is.na(target_cols)]
-  df_num <- df[, target_cols, drop = FALSE]
-  
-  # 3. Tính thống kê
-  cat("[2/4] Tính thống kê mô tả...\n")
-  stats_list <- lapply(df_num, descriptive_stats)
-  stats_df <- do.call(rbind, stats_list)
-  colnames(stats_df) <- c("n", "Mean", "Median", "Min", "Q1", "Q3", "Max", 
-                          "SD", "Var", "IQR", "Skewness", "Kurtosis", 
-                          "Missing", "Missing_%")
-  stats_df <- round(stats_df, 3)
-  
-  # 4. Thống kê theo Manufacturer
-  cat("[3/4] Thống kê theo nhà sản xuất...\n")
-  manufacturer_stats <- df %>%
-    group_by(.data[[cols$manufacturer]]) %>%
-    summarise(
-      n = sum(!is.na(.data[[cols$bandwidth]])),
-      Mean = mean(.data[[cols$bandwidth]], na.rm = TRUE),
-      Median = median(.data[[cols$bandwidth]], na.rm = TRUE),
-      SD = sd(.data[[cols$bandwidth]], na.rm = TRUE),
-      Q1 = quantile(.data[[cols$bandwidth]], 0.25, na.rm = TRUE),
-      Q3 = quantile(.data[[cols$bandwidth]], 0.75, na.rm = TRUE),
-      IQR = Q3 - Q1,
-      .groups = "drop"
-    ) %>%
-    arrange(desc(Median))
-  
-  # 5. Phân phối Manufacturer
-  cat("[4/4] Phân phối nhà sản xuất...\n")
-  manufacturer_dist <- df %>%
-    count(.data[[cols$manufacturer]]) %>%
-    mutate(
-      pct = n / sum(n) * 100,
-      cum_pct = cumsum(pct)
-    ) %>%
-    arrange(desc(n))
-  
-  # 6. Tương quan với Bandwidth
-  cat("\n[5/5] Tương quan với Memory Bandwidth...\n")
-  cor_columns <- setdiff(names(df_num), cols$bandwidth)
-  cor_matrix <- cor(df_num, use = "pairwise.complete.obs")
-  
-  correlation <- data.frame(
-    Variable = cor_columns,
-    Pearson = cor_matrix[cols$bandwidth, cor_columns],
-    Spearman = cor(df_num, use = "pairwise.complete.obs", method = "spearman")[cols$bandwidth, cor_columns]
-  )
-  correlation <- correlation[order(-abs(correlation$Pearson)), ]
-  row.names(correlation) <- NULL
-  
-  # -------------------- XUẤT KẾT QUẢ --------------------
-  dir.create(OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
-  
-  # Lưu CSV
-  write.csv(stats_df, file.path(OUTPUT_DIR, "01_descriptive_stats.csv"))
-  write.csv(manufacturer_stats, file.path(OUTPUT_DIR, "02_bandwidth_by_manufacturer.csv"))
-  write.csv(manufacturer_dist, file.path(OUTPUT_DIR, "03_manufacturer_distribution.csv"))
-  write.csv(correlation, file.path(OUTPUT_DIR, "04_correlations.csv"))
-  
-  # -------------------- BÁO CÁO DẠNG TEXT --------------------
-  report <- c(
-    "========================================",
-    "BÁO CÁO THỐNG KÊ MÔ TẢ GPU",
-    "========================================",
-    "",
-    paste("1. TỔNG QUAN DỮ LIỆU"),
-    paste("   - Số quan sát:", nrow(df)),
-    paste("   - Số biến:", ncol(df)),
-    paste("   - Năm:", min(df[[cols$year]], na.rm = TRUE), "–", max(df[[cols$year]], na.rm = TRUE)),
-    paste("   - Tổng ô khuyết:", sum(is.na(df))),
-    "",
-    paste("2. THỐNG KÊ MÔ TẢ CÁC BIẾN CHÍNH"),
-    paste("   (n =", nrow(df), "quan sát)"),
-    "",
-    paste("   Variable  | n | Mean | Median | SD | Min | Max"),
-    paste("   ----------|---|------|--------|----|-----|-----")
-  )
-  
-  for (var in rownames(stats_df)) {
-    row <- stats_df[var, ]
-    report <- c(report,
-      sprintf("   %-10s | %3d | %6.2f | %7.2f | %5.2f | %6.2f | %6.2f",
-              var, row["n"], row["Mean"], row["Median"], row["SD"], row["Min"], row["Max"])
-    )
-  }
-  
-  report <- c(report,
-    "",
-    paste("3. PHÂN PHỐI NHÀ SẢN XUẤT"),
-    "",
-    paste("   Manufacturer | n | % | Cum %"),
-    paste("   -------------|---|---|------")
-  )
-  
-  for (i in 1:nrow(manufacturer_dist)) {
-    row <- manufacturer_dist[i, ]
-    report <- c(report,
-      sprintf("   %-13s | %3d | %4.1f | %5.1f",
-              row[[1]], row$n, row$pct, row$cum_pct)
-    )
-  }
-  
-  report <- c(report,
-    "",
-    paste("4. TƯƠNG QUAN VỚI MEMORY BANDWIDTH"),
-    "",
-    paste("   Variable        | Pearson | Spearman"),
-    paste("   ----------------|---------|---------")
-  )
-  
-  for (i in 1:nrow(correlation)) {
-    report <- c(report,
-      sprintf("   %-16s | %7.3f | %7.3f",
-              correlation$Variable[i], correlation$Pearson[i], correlation$Spearman[i])
-    )
-  }
-  
-  report <- c(report,
-    "",
-    "========================================",
-    "GHI CHÚ:",
-    paste("  -", cols$bandwidth, "là biến mục tiêu"),
-    "  - SD: độ lệch chuẩn mẫu",
-    "  - Skewness > 1: lệch phải mạnh; < -1: lệch trái mạnh",
-    "  - Tương quan không chứng minh quan hệ nhân quả",
-    "========================================"
-  )
-  
-  # Ghi báo cáo
-  writeLines(report, file.path(OUTPUT_DIR, "REPORT.txt"))
-  
-  # In ra console
-  cat("\n", paste(report, collapse = "\n"), "\n\n")
-  
-  cat("✅ Đã lưu kết quả tại:", OUTPUT_DIR, "\n")
-  cat("  - 01_descriptive_stats.csv\n")
-  cat("  - 02_bandwidth_by_manufacturer.csv\n")
-  cat("  - 03_manufacturer_distribution.csv\n")
-  cat("  - 04_correlations.csv\n")
-  cat("  - REPORT.txt\n")
-}
+bang_2 <- round(as.data.frame(sapply(num_data, calc_stats_full)), 3)
+options(width = 150)
+print(bang_2)
+write.csv(bang_2, "Bang_2_Thong_ke_5_bien.csv", row.names = TRUE)
 
-# Chạy
-main()
+
+# Histogram: Phân phối, giá trị mean median 5 biến định lượng
+hist_plots <- lapply(names(num_data), function(col) {
+  vals <- df[[col]]
+  
+  mean_v   <- mean(vals, na.rm = TRUE)
+  median_v <- median(vals, na.rm = TRUE)
+  skew_v   <- e1071::skewness(vals, na.rm = TRUE, type = 2)
+  
+  fill_color <- if (col == "Year") "#386888" else "#48CAE4"
+  
+  # Tach subtitle thanh 2 dong 
+  sub_text <- sprintf(
+    "Skewness = %.3f\nMean = %s  |  Median = %s",
+    skew_v,
+    format(round(mean_v, 2), big.mark = ","),
+    format(round(median_v, 2), big.mark = ",")
+  )
+  
+  p <- ggplot(df, aes(x = .data[[col]])) +
+    geom_histogram(bins = 30, fill = fill_color, colour = "white", alpha = 0.9) +
+    geom_vline(xintercept = mean_v, color = "#d62828", 
+               linetype = "dashed", linewidth = 0.8) +
+    geom_vline(xintercept = median_v, color = "#2a9d8f", 
+               linetype = "dotdash", linewidth = 0.8) +
+    theme_minimal(base_size = 11) +
+    theme(
+      plot.title    = element_text(face = "bold", size = 11, hjust = 0.5),
+      plot.subtitle = element_text(size = 8.5, color = "gray30", hjust = 0.5,
+                                   lineheight = 1.4),
+      panel.grid.minor = element_blank(),
+      axis.text.x = element_text(size = 8, angle = 45, hjust = 1)
+    ) +
+    labs(
+      title = paste0("Phân phối: ", col),
+      subtitle = sub_text,
+      x = col,
+      y = "Tần số"
+    )
+  
+  if (col == "Year") {
+    p <- p + scale_x_continuous(
+      breaks = seq(1998, 2018, by = 3),
+      labels = function(x) as.integer(x) 
+    )
+  } else if (col == "Memory (MB)") {
+    p <- p + scale_x_continuous(
+      breaks = seq(0, 33000, by = 6000),    
+      labels = scales::comma
+    )
+  } else if (col == "Memory_Bandwidth (GB/sec)") {
+    p <- p + scale_x_continuous(
+      breaks = seq(0, 1300, by = 200),
+      labels = scales::comma
+    )
+  } else if (col == "Memory_Bus (Bit)") {
+    p <- p + scale_x_continuous(
+      breaks = seq(0, 8000, by = 2000),     
+      labels = scales::comma
+    )
+  } else if (col == "Memory_Speed (MHz)") {
+    p <- p + scale_x_continuous(
+      breaks = seq(0, 2200, by = 400),
+      labels = scales::comma
+    )
+  }
+  
+  return(p)
+})
+
+hinh_2 <- wrap_plots(hist_plots, ncol = 3) +
+  plot_annotation(
+    title = "Phân phối của toàn bộ biến định lượng",
+    caption = "─ ─  Trung bình (Mean)    ─ · ─  Trung vị (Median)",
+    theme = theme(
+      plot.title   = element_text(face = "bold", size = 14, hjust = 0.5),
+      plot.caption = element_text(size = 9, hjust = 0.5, color = "gray40")
+    )
+  )
+
+print(hinh_2)
+
+# Tính toán các khoảng phân vị để tìm ngoại lai
+bandwidth <- df[["Memory_Bandwidth (GB/sec)"]]
+
+q1 <- quantile(bandwidth, 0.25, na.rm = TRUE)
+q3 <- quantile(bandwidth, 0.75, na.rm = TRUE)
+iqr <- q3 - q1
+lower <- q1 - 1.5 * iqr
+upper <- q3 + 1.5 * iqr
+
+outlier_mask <- bandwidth < lower | bandwidth > upper
+cat("--- KẾT QUẢ QUY TẮC TUKEY ---\n")
+cat("Q1, Q3, IQR:", round(q1, 2), round(q3, 2), round(iqr, 2), "\n")
+cat("Cận Tukey (Lower, Upper):", round(lower, 2), round(upper, 2), "\n")
+cat("Số mẫu ngoại lệ (Outliers):", sum(outlier_mask, na.rm = TRUE), "\n")
+cat("Tỷ lệ ngoại lệ (%):", round(mean(outlier_mask, na.rm = TRUE) * 100, 2), "%\n\n")
+
+
+# Bảng: Thống kê Bandwidth theo nhà sản xuất 
+bang_3 <- df %>%
+  group_by(Manufacturer) %>%
+  summarise(
+    n = n(),
+    Mean = round(mean(`Memory_Bandwidth (GB/sec)`, na.rm = TRUE), 2),
+    Median = round(median(`Memory_Bandwidth (GB/sec)`, na.rm = TRUE), 2),
+    Std = round(sd(`Memory_Bandwidth (GB/sec)`, na.rm = TRUE), 2),
+    Q1 = round(quantile(`Memory_Bandwidth (GB/sec)`, 0.25, na.rm = TRUE), 2),
+    Q3 = round(quantile(`Memory_Bandwidth (GB/sec)`, 0.75, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n))
+
+print(bang_3)
+write.csv(bang_3, "Bang_3_Bandwidth_theo_Hang.csv", row.names = FALSE)
+
+
+# Line: Băng thông bộ nhớ trung bình theo năm của từng nhà sản xuất
+annual_bw_mfr <- df %>%
+  group_by(Year, Manufacturer) %>%
+  summarise(
+    Mean_BW = mean(`Memory_Bandwidth (GB/sec)`, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+hinh_5 <- ggplot(annual_bw_mfr, aes(x = Year, y = Mean_BW, color = Manufacturer)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(
+    breaks = seq(1998, 2017, by = 2),
+    labels = function(x) sprintf("%d", x)
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Băng thông bộ nhớ trung bình theo Năm và Nhà sản xuất",
+    x = "Năm phát hành",
+    y = "Băng thông trung bình (GB/sec)",
+    color = "Nhà sản xuất"
+  )
+
+print(hinh_5)
+
+
+# Scatter
+predictors <- c("Memory (MB)", "Memory_Speed (MHz)", "Year", "Memory_Bus (Bit)")
+
+scatter_plots <- lapply(predictors, function(pred) {
+  r_val <- cor(df[[pred]], df[["Memory_Bandwidth (GB/sec)"]], use = "complete.obs")
+  
+  ggplot(df, aes(x = .data[[pred]], y = `Memory_Bandwidth (GB/sec)`, color = Manufacturer)) +
+    geom_point(alpha = 0.5, size = 1.3) +
+    
+    # Đường hồi quy tuyến tính đại diện cho Pearson r
+    geom_smooth(method = "lm", color = "black", linetype = "dashed", se = FALSE, linewidth = 0.7) +
+    
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_continuous(labels = function(x) if(pred == "Year") sprintf("%d", x) else scales::comma(x)) +
+    
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(face = "bold", size = 10.5),
+      plot.subtitle = element_text(size = 9, color = "gray20")
+    ) +
+    labs(
+      title = paste0("Memory Bandwidth vs ", pred),
+      subtitle = sprintf("Pearson r = %.3f", r_val),
+      x = pred,
+      y = "Memory Bandwidth (GB/sec)",
+      color = "Nhà sản xuất:"
+    )
+})
+
+# Gộp các biểu đồ
+hinh_scatter <- wrap_plots(scatter_plots, ncol = 2) + 
+  plot_layout(guides = "collect") & 
+  theme(legend.position = 'bottom', legend.title = element_text(face = "bold"))
+
+print(hinh_scatter)
+ggsave("Pics/TKMoTa/08_scatter_bandwidth_predictors.png", plot = hinh_scatter, width = 10, height = 8.5, dpi = 300)
+
+
+# Top 15 kiến trúc GPU
+top15_arch <- df %>%
+  count(Architecture, name = "Count") %>%
+  top_n(15, Count) %>%
+  arrange(Count)
+
+hinh_top15_arch <- ggplot(top15_arch, aes(x = reorder(Architecture, Count), y = Count)) +
+  geom_col(fill = "#5B4B8A", width = 0.75) +
+  geom_text(aes(label = Count), hjust = -0.2, size = 3.5) +
+  coord_flip() +
+  theme_minimal() +
+  labs(
+    title = "Top 15 kiến trúc GPU có nhiều bản ghi nhất",
+    x = "Kiến trúc (Architecture)",
+    y = "Số lượng bản ghi"
+  ) +
+  expand_limits(y = max(top15_arch$Count) * 1.1)
+
+print(hinh_top15_arch)
+
